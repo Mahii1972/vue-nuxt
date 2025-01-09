@@ -1,6 +1,9 @@
 <template>
-  <div class="w-full">
-    <Bar v-if="chartData" :data="chartData" :options="chartOptions" />
+  <div class="w-full bg-gray-900 text-white p-6 rounded-lg">
+    <h1 class="text-2xl font-bold mb-6">BSE 500 Distribution</h1>
+    <div class="h-[300px]">
+      <Bar v-if="chartData" :data="chartData" :options="chartOptions" />
+    </div>
   </div>
 </template>
 
@@ -63,15 +66,15 @@ const chartData = computed(() => ({
     ],
     backgroundColor: (context) => {
       const value = context.raw
-      if (context.dataIndex <= 4) return 'rgba(239, 68, 68, 0.7)' // red for negative
-      if (context.dataIndex === 5) return 'rgba(156, 163, 175, 0.7)' // gray for 0
-      return 'rgba(34, 197, 94, 0.7)' // green for positive
+      if (context.dataIndex <= 4) return 'rgba(220, 38, 38, 0.7)' // red-600
+      if (context.dataIndex === 5) return 'rgba(75, 85, 99, 0.7)' // gray-600  
+      return 'rgba(5, 150, 105, 0.7)' // emerald-600
     },
     borderColor: (context) => {
       const value = context.raw
-      if (context.dataIndex <= 4) return 'rgb(239, 68, 68)' // red for negative
-      if (context.dataIndex === 5) return 'rgb(156, 163, 175)' // gray for 0
-      return 'rgb(34, 197, 94)' // green for positive
+      if (context.dataIndex <= 4) return 'rgb(220, 38, 38)' // red-600
+      if (context.dataIndex === 5) return 'rgb(75, 85, 99)' // gray-600
+      return 'rgb(5, 150, 105)' // emerald-600
     },
     borderWidth: 1
   }]
@@ -85,34 +88,35 @@ const chartOptions = {
       display: false
     },
     title: {
-      display: true,
-      text: 'Advances vs. Declines',
-      padding: 20,
-      font: {
-        size: 16,
-        weight: 'bold'
-      }
+      display: false
     },
-    subtitle: {
-      display: true,
-      text: 'The distribution of stocks in the given sector / index based on 1D price return',
-      padding: {
-        bottom: 20
-      }
+    tooltip: {
+      backgroundColor: '#1F2937', // gray-800
+      titleColor: '#F9FAFB', // gray-50
+      bodyColor: '#F9FAFB', // gray-50
+      padding: 12,
+      cornerRadius: 4
     }
   },
   scales: {
     y: {
       beginAtZero: true,
       grid: {
-        display: false
+        color: 'rgba(75, 85, 99, 0.2)', // gray-600 with opacity
+        drawBorder: false
+      },
+      ticks: {
+        color: '#9CA3AF' // gray-400
       }
     },
     x: {
       grid: {
         display: false
+      },
+      ticks: {
+        color: '#9CA3AF' // gray-400
       }
     }
   }
 }
-</script> 
+</script>
