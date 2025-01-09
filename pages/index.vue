@@ -13,27 +13,8 @@
 
     <!-- Sectoral Performance -->
     <div>
-      <div class="flex gap-2 mb-4">
-        <button 
-          v-for="duration in availableDurations" 
-          :key="duration"
-          @click="selectedDuration = duration"
-          :class="[
-            'px-4 py-2 rounded-lg transition-colors duration-200',
-            selectedDuration === duration 
-              ? 'bg-blue-500 text-white shadow-sm' 
-              : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-          ]"
-        >
-          {{ duration }}
-        </button>
-      </div>
-      
-      <div v-if="currentSectoralData.length">
-        <SectoralPerformanceChart 
-          :sectoral-data="currentSectoralData" 
-          :duration="selectedDuration"
-        />
+      <div v-if="Object.keys(sectoralData).length">
+        <SectoralPerformanceChart :data="sectoralData" />
       </div>
       <p v-else class="text-gray-500 text-center py-8">No sectoral data available</p>
     </div>
@@ -41,19 +22,8 @@
 </template>
 
 <script setup>
-const selectedDuration = ref('1d')
 const sectoralData = ref({})
 const bseData = ref([])
-
-// Computed property for available durations
-const availableDurations = computed(() => {
-  return Object.keys(sectoralData.value).sort()
-})
-
-// Computed property for current sectoral data based on selected duration
-const currentSectoralData = computed(() => {
-  return sectoralData.value[selectedDuration.value] || []
-})
 
 // Fetch sectoral data
 const fetchSectoralData = async () => {
@@ -62,10 +32,6 @@ const fetchSectoralData = async () => {
     const result = await response.json()
     if (result.success) {
       sectoralData.value = result.data
-      // Set initial duration if not already in available durations
-      if (!result.data[selectedDuration.value]) {
-        selectedDuration.value = Object.keys(result.data)[0]
-      }
     }
   } catch (error) {
     console.error('Error fetching sectoral data:', error)
@@ -94,6 +60,6 @@ onMounted(() => {
 
 <style scoped>
 .container {
-  max-width: 1400px; /* Larger max-width for better use of space */
+  max-width: 1400px;
 }
 </style> 
