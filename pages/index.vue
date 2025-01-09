@@ -1,9 +1,9 @@
 <template>
-  <div class="container mx-auto p-4 space-y-8">
+  <div class="container mx-auto p-4 space-y-8 text-white">
     <h1 class="text-2xl font-bold">Market Overview</h1>
     
     <!-- BSE 500 Distribution Chart -->
-    <div class="bg-white rounded-lg shadow-sm">
+    <div class="rounded-lg shadow-sm">
       <div v-if="bseData.length" class="p-4">
         <div class="h-[400px]">
           <BSEDistributionChart :distribution="bseData[0]" />
