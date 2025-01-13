@@ -18,12 +18,22 @@
       </div>
       <p v-else class="text-gray-500 text-center py-8">No sectoral data available</p>
     </div>
+
+    <!-- Market Data Analysis -->
+    <div class="bg-gray-900 rounded-lg p-4">
+      <h2 class="text-xl font-semibold mb-4">Market Data Analysis</h2>
+      <div v-if="marketData.length">
+        <MarketDataTable :data="marketData" />
+      </div>
+      <p v-else class="text-gray-500 text-center py-8">No market data available</p>
+    </div>
   </div>
 </template>
 
 <script setup>
 const sectoralData = ref({})
 const bseData = ref([])
+const marketData = ref([])
 
 // Fetch sectoral data
 const fetchSectoralData = async () => {
@@ -51,10 +61,24 @@ const fetchBSEData = async () => {
   }
 }
 
+// Fetch market data analysis
+const fetchMarketData = async () => {
+  try {
+    const response = await fetch('/api/marketdata')
+    const result = await response.json()
+    if (result.success) {
+      marketData.value = result.data
+    }
+  } catch (error) {
+    console.error('Error fetching market data:', error)
+  }
+}
+
 // Initial data fetch
 onMounted(() => {
   fetchSectoralData()
   fetchBSEData()
+  fetchMarketData()
 })
 </script>
 
