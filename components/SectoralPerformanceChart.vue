@@ -15,18 +15,18 @@
           <tr v-for="sector in uniqueSectors" :key="sector" class="hover:bg-gray-800">
             <td class="sticky left-0 bg-gray-900 p-3 border border-gray-700 font-medium">{{ sector }}</td>
             <td v-for="duration in durations" :key="duration" 
-                class="p-3 border border-gray-700 relative"
+                class="p-3 border border-gray-700"
                 :class="getCellClass(sector, duration)">
-              <div class="h-12 flex items-center justify-center">
-                <Bar 
-                  :data="getChartData(sector, duration)"
-                  :options="chartOptions"
-                  class="w-full"
-                />
-                <span 
-                  class="absolute text-sm font-medium"
-                  :class="getValuePosition(sector, duration)"
-                >{{ getValue(sector, duration) }}%</span>
+              <div class="flex flex-col items-center">
+                <div class="h-12 w-full relative flex flex-col items-center">
+                  <div class="absolute h-full w-[1px] bg-gray-600 z-0" style="left: 50%"></div>
+                  <Bar 
+                    :data="getChartData(sector, duration)"
+                    :options="chartOptions"
+                    class="w-full absolute top-0 z-10"
+                  />
+                  <span class="text-sm font-medium absolute bottom-[-4px] z-20">{{ getValue(sector, duration) }}%</span>
+                </div>
               </div>
             </td>
           </tr>
@@ -132,15 +132,6 @@ const getCellClass = (sector, duration) => {
     'text-green-400': value > 0,
     'text-red-400': value < 0,
     'text-gray-400': value === 0
-  }
-}
-
-const getValuePosition = (sector, duration) => {
-  const value = getValue(sector, duration)
-  return {
-    'left-2': value < 0,
-    'right-2': value >= 0,
-    'text-white': true
   }
 }
 </script>

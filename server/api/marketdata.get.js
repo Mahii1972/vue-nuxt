@@ -45,12 +45,53 @@ export default defineEventHandler(async (event) => {
     const analyzedData = Object.entries(groupedData).map(([key, group]) => {
       // Find yearly high and its date
       const yearlyHigh = Math.max(...group.highs)
-      const peakIndex = group.highs.indexOf(yearlyHigh)
-      const peakDate = group.dates[peakIndex]
+      
+      // Find all dates where the high was reached
+      const highDates = group.dates.filter((_, i) => group.highs[i] === yearlyHigh)
+      const firstHighDate = highDates[0]
+      const firstHighIndex = group.dates.findIndex(d => d.getTime() === firstHighDate.getTime())
 
-      // Calculate days below 10% threshold
+      // Calculate days until 10% threshold breach
       const threshold = yearlyHigh * 0.9
-      const daysBelow10 = group.prices.filter(price => price <= threshold).length
+      let daysTo10Percent = 0
+      let breached10Percent = false
+      let currentYear = group.year
+
+      // Function to check a specific year's data for breach
+      const checkYearForBreach = (yearData, startIndex = 0) => {
+        for (let i = startIndex; i < yearData.prices.length; i++) {
+          if (yearData.prices[i] <= threshold) {
+            daysTo10Percent = Math.round((yearData.dates[i] - firstHighDate) / (1000 * 60 * 60 * 24))
+            return true
+          }
+        }
+        return false
+      }
+
+      // Start with current year from the high date
+      breached10Percent = checkYearForBreach(group, firstHighIndex)
+
+      // If not breached, keep checking subsequent years until we find a breach
+      while (!breached10Percent) {
+        currentYear++
+        const nextYearKey = `${group.index_name}_${currentYear}`
+        const nextYearData = groupedData[nextYearKey]
+
+        if (!nextYearData) {
+          // If we don't have data for the next year, use the last available date
+          const lastDate = group.dates[group.dates.length - 1]
+          daysTo10Percent = Math.round((lastDate - firstHighDate) / (1000 * 60 * 60 * 24))
+          break
+        }
+
+        breached10Percent = checkYearForBreach(nextYearData)
+        if (!breached10Percent && currentYear - group.year > 5) {
+          // If we've checked 5 years ahead and still no breach, use the last available date
+          const lastDate = nextYearData.dates[nextYearData.dates.length - 1]
+          daysTo10Percent = Math.round((lastDate - firstHighDate) / (1000 * 60 * 60 * 24))
+          break
+        }
+      }
 
       // Calculate maximum drawdown and recovery days
       let maxDrawdown = 0
@@ -58,8 +99,8 @@ export default defineEventHandler(async (event) => {
       let recoveryDays = null
       let recovered = false
 
-      // Start from peak date
-      for (let i = peakIndex; i < group.prices.length; i++) {
+      // Start from first high date
+      for (let i = firstHighIndex; i < group.prices.length; i++) {
         const drawdown = ((yearlyHigh - group.prices[i]) / yearlyHigh) * 100
         
         if (drawdown > maxDrawdown) {
@@ -116,9 +157,9 @@ export default defineEventHandler(async (event) => {
         index_name: group.index_name,
         year: group.year,
         yearly_high: yearlyHigh,
-        days_below_10: daysBelow10,
+        days_below_10: daysTo10Percent,
         max_drawdown: maxDrawdown.toFixed(2),
-        recovery_days: recoveryDays || maxDrawdown === 0 ? recoveryDays || 0 : Math.max(1, recoveryDays || 0) // Ensure at least 1 day if there was a drawdown
+        recovery_days: recoveryDays || maxDrawdown === 0 ? recoveryDays || 0 : Math.max(1, recoveryDays || 0)
       }
     })
 
