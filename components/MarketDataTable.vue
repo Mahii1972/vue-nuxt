@@ -43,12 +43,24 @@
             <td class="px-4 py-2">{{ row.index_name }}</td>
             <td class="px-4 py-2">{{ row.year }}</td>
             <td class="px-4 py-2">{{ formatNumber(row.yearly_high) }}</td>
-            <td class="px-4 py-2">{{ row.days_below_10 }}</td>
+            <td class="px-4 py-2 relative group">
+              <div class="flex flex-col">
+                <span>{{ row.days_below_10 }}</span>
+                <span v-if="row.days_below_10 > 0" class="text-xs text-gray-400">
+                  {{ formatDate(row.breach_date) }} → {{ formatDate(row.breach_end_date) }}
+                </span>
+              </div>
+            </td>
             <td class="px-4 py-2" :class="getDrawdownClass(row.max_drawdown)">
               {{ row.max_drawdown }}%
             </td>
-            <td class="px-4 py-2" :class="getRecoveryClass(row.recovery_days)">
-              {{ formatRecoveryDays(row.recovery_days) }}
+            <td class="px-4 py-2 relative group" :class="getRecoveryClass(row.recovery_days)">
+              <div class="flex flex-col">
+                <span>{{ formatRecoveryDays(row.recovery_days) }}</span>
+                <span v-if="row.recovery_days > 0" class="text-xs text-gray-400">
+                  {{ formatDate(row.drawdown_date) }} → {{ formatDate(row.recovery_date) }}
+                </span>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -83,6 +95,16 @@ const formatNumber = (value) => {
   return new Intl.NumberFormat('en-IN', {
     maximumFractionDigits: 2
   }).format(value)
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  })
 }
 
 const getDrawdownClass = (drawdown) => {

@@ -2,7 +2,6 @@ import db from '../db/db'
 
 export default defineEventHandler(async (event) => {
   try {
-    // Simple query to get all the data we need
     const query = `
       SELECT
         index_name,
@@ -45,64 +44,72 @@ export default defineEventHandler(async (event) => {
     const analyzedData = Object.entries(groupedData).map(([key, group]) => {
       // Find yearly high and its date
       const yearlyHigh = Math.max(...group.highs)
-      
-      // Find all dates where the high was reached
-      const highDates = group.dates.filter((_, i) => group.highs[i] === yearlyHigh)
-      const firstHighDate = highDates[0]
-      const firstHighIndex = group.dates.findIndex(d => d.getTime() === firstHighDate.getTime())
+      const highIndex = group.highs.indexOf(yearlyHigh)
+      const highDate = group.dates[highIndex]
 
-      // Calculate days until 10% threshold breach
+      // Calculate threshold and breach periods
       const threshold = yearlyHigh * 0.9
-      let daysTo10Percent = 0
-      let breached10Percent = false
-      let currentYear = group.year
+      let daysBelow10 = 0
+      let breachStartDate = null
+      let breachEndDate = null
+      let consecutiveDays = 0
+      let tempStartDate = null
 
-      // Function to check a specific year's data for breach
-      const checkYearForBreach = (yearData, startIndex = 0) => {
-        for (let i = startIndex; i < yearData.prices.length; i++) {
-          if (yearData.prices[i] <= threshold) {
-            daysTo10Percent = Math.round((yearData.dates[i] - firstHighDate) / (1000 * 60 * 60 * 24))
-            return true
+      // Function to check if a date is a trading day
+      const isConsecutiveDay = (date1, date2) => {
+        const diffTime = Math.abs(date2 - date1)
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        return diffDays <= 3 // Allow for weekends and single holidays
+      }
+
+      // Process data for current year
+      for (let i = 0; i < group.prices.length; i++) {
+        const price = group.prices[i]
+        const date = group.dates[i]
+
+        if (price <= threshold) {
+          if (!tempStartDate) {
+            tempStartDate = date
+            consecutiveDays = 1
+          } else if (isConsecutiveDay(group.dates[i-1], date)) {
+            consecutiveDays++
+          } else {
+            // Reset if not consecutive
+            tempStartDate = date
+            consecutiveDays = 1
           }
-        }
-        return false
-      }
 
-      // Start with current year from the high date
-      breached10Percent = checkYearForBreach(group, firstHighIndex)
-
-      // If not breached, keep checking subsequent years until we find a breach
-      while (!breached10Percent) {
-        currentYear++
-        const nextYearKey = `${group.index_name}_${currentYear}`
-        const nextYearData = groupedData[nextYearKey]
-
-        if (!nextYearData) {
-          // If we don't have data for the next year, use the last available date
-          const lastDate = group.dates[group.dates.length - 1]
-          daysTo10Percent = Math.round((lastDate - firstHighDate) / (1000 * 60 * 60 * 24))
-          break
-        }
-
-        breached10Percent = checkYearForBreach(nextYearData)
-        if (!breached10Percent && currentYear - group.year > 5) {
-          // If we've checked 5 years ahead and still no breach, use the last available date
-          const lastDate = nextYearData.dates[nextYearData.dates.length - 1]
-          daysTo10Percent = Math.round((lastDate - firstHighDate) / (1000 * 60 * 60 * 24))
-          break
+          // If we have 5 consecutive days below threshold, consider it a breach
+          if (consecutiveDays >= 5 && !breachStartDate) {
+            breachStartDate = tempStartDate
+          }
+        } else {
+          if (breachStartDate && !breachEndDate) {
+            breachEndDate = date
+            // Calculate days in breach period
+            const breachDays = Math.round((breachEndDate - breachStartDate) / (1000 * 60 * 60 * 24))
+            daysBelow10 = breachDays
+          }
+          tempStartDate = null
+          consecutiveDays = 0
         }
       }
 
-      // Calculate maximum drawdown and recovery days
+      // If breach started but didn't end, use last available date
+      if (breachStartDate && !breachEndDate) {
+        breachEndDate = group.dates[group.dates.length - 1]
+        daysBelow10 = Math.round((breachEndDate - breachStartDate) / (1000 * 60 * 60 * 24))
+      }
+
+      // Calculate max drawdown and recovery
       let maxDrawdown = 0
       let maxDrawdownDate = null
       let recoveryDays = null
-      let recovered = false
+      let recoveryDate = null
 
-      // Start from first high date
-      for (let i = firstHighIndex; i < group.prices.length; i++) {
+      // Find maximum drawdown
+      for (let i = 0; i < group.prices.length; i++) {
         const drawdown = ((yearlyHigh - group.prices[i]) / yearlyHigh) * 100
-        
         if (drawdown > maxDrawdown) {
           maxDrawdown = drawdown
           maxDrawdownDate = group.dates[i]
@@ -113,43 +120,19 @@ export default defineEventHandler(async (event) => {
       if (maxDrawdownDate) {
         const maxDrawdownIndex = group.dates.findIndex(d => d.getTime() === maxDrawdownDate.getTime())
         
-        // Look for recovery point in same year
+        // Look for recovery point
         for (let i = maxDrawdownIndex; i < group.prices.length; i++) {
-          if (group.prices[i] >= yearlyHigh) {
+          if (group.prices[i] >= yearlyHigh * 0.95) { // Consider 95% of high as recovery
             recoveryDays = Math.round((group.dates[i] - maxDrawdownDate) / (1000 * 60 * 60 * 24))
-            recovered = true
+            recoveryDate = group.dates[i]
             break
           }
         }
 
-        // If not recovered in same year, look in next year
-        if (!recovered) {
-          const nextYearKey = `${group.index_name}_${group.year + 1}`
-          const nextYearData = groupedData[nextYearKey]
-          
-          if (nextYearData) {
-            for (let i = 0; i < nextYearData.prices.length; i++) {
-              if (nextYearData.prices[i] >= yearlyHigh) {
-                recoveryDays = Math.round((nextYearData.dates[i] - maxDrawdownDate) / (1000 * 60 * 60 * 24))
-                recovered = true
-                break
-              }
-            }
-          }
-        }
-
-        // If still not recovered, calculate days till end of available data
-        if (!recovered) {
-          const nextYearKey = `${group.index_name}_${group.year + 1}`
-          const nextYearData = groupedData[nextYearKey]
-          
-          if (nextYearData && nextYearData.dates.length > 0) {
-            // If next year data exists, count days till last available date in next year
-            recoveryDays = Math.round((nextYearData.dates[nextYearData.dates.length - 1] - maxDrawdownDate) / (1000 * 60 * 60 * 24))
-          } else {
-            // Otherwise count days till last date in current year
-            recoveryDays = Math.round((group.dates[group.dates.length - 1] - maxDrawdownDate) / (1000 * 60 * 60 * 24))
-          }
+        // If no recovery found, use last available date
+        if (!recoveryDate) {
+          recoveryDate = group.dates[group.dates.length - 1]
+          recoveryDays = Math.round((recoveryDate - maxDrawdownDate) / (1000 * 60 * 60 * 24))
         }
       }
 
@@ -157,9 +140,13 @@ export default defineEventHandler(async (event) => {
         index_name: group.index_name,
         year: group.year,
         yearly_high: yearlyHigh,
-        days_below_10: daysTo10Percent,
+        days_below_10: daysBelow10,
+        breach_date: breachStartDate,
+        breach_end_date: breachEndDate,
         max_drawdown: maxDrawdown.toFixed(2),
-        recovery_days: recoveryDays || maxDrawdown === 0 ? recoveryDays || 0 : Math.max(1, recoveryDays || 0)
+        recovery_days: recoveryDays || 0,
+        drawdown_date: maxDrawdownDate,
+        recovery_date: recoveryDate
       }
     })
 
@@ -177,5 +164,3 @@ export default defineEventHandler(async (event) => {
     return { success: false, error: 'Failed to fetch market data analysis' }
   }
 })
-
-
