@@ -33,32 +33,52 @@
             <th class="px-4 py-2 text-left">Index Name</th>
             <th class="px-4 py-2 text-left">Year</th>
             <th class="px-4 py-2 text-left">Yearly High</th>
-            <th class="px-4 py-2 text-left">Days Below 10%</th>
+            <th class="px-4 py-2 text-left">Days to Fall 10% from ATH</th>
             <th class="px-4 py-2 text-left">Max Drawdown (%)</th>
-            <th class="px-4 py-2 text-left">Recovery Days</th>
+            <th class="px-4 py-2 text-left">Recovery from DD</th>
+            <th class="px-4 py-2 text-left">Recovery from 10%</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="(row, index) in filteredData" :key="index" class="border-t border-gray-700 hover:bg-gray-800">
             <td class="px-4 py-2">{{ row.index_name }}</td>
             <td class="px-4 py-2">{{ row.year }}</td>
-            <td class="px-4 py-2">{{ formatNumber(row.yearly_high) }}</td>
+            <td class="px-4 py-2">
+              <div class="flex flex-col">
+                <span>{{ formatNumber(row.yearly_high) }}</span>
+                <span class="text-xs text-gray-400">{{ formatDate(row.fall_start_date) }}</span>
+              </div>
+            </td>
             <td class="px-4 py-2 relative group">
               <div class="flex flex-col">
-                <span>{{ row.days_below_10 }}</span>
-                <span v-if="row.days_below_10 > 0" class="text-xs text-gray-400">
-                  {{ formatDate(row.breach_date) }} → {{ formatDate(row.breach_end_date) }}
+                <span>{{ row.days_to_fall_10 }}</span>
+                <span v-if="row.days_to_fall_10 > 0" class="text-xs text-gray-400">
+                  {{ formatDate(row.fall_start_date) }} → {{ formatDate(row.fall_end_date) }}
+                </span>
+                <span v-if="row.breach_value" class="text-xs text-red-400">
+                  Breach at {{ formatNumber(row.breach_value) }}
                 </span>
               </div>
             </td>
             <td class="px-4 py-2" :class="getDrawdownClass(row.max_drawdown)">
-              {{ row.max_drawdown }}%
+              <div class="flex flex-col">
+                <span>{{ row.max_drawdown }}%</span>
+                <span class="text-xs text-gray-400">{{ formatDate(row.drawdown_date) }}</span>
+              </div>
             </td>
             <td class="px-4 py-2 relative group" :class="getRecoveryClass(row.recovery_days)">
               <div class="flex flex-col">
                 <span>{{ formatRecoveryDays(row.recovery_days) }}</span>
                 <span v-if="row.recovery_days > 0" class="text-xs text-gray-400">
                   {{ formatDate(row.drawdown_date) }} → {{ formatDate(row.recovery_date) }}
+                </span>
+              </div>
+            </td>
+            <td class="px-4 py-2 relative group" :class="getRecoveryClass(row.recovery_10_days)">
+              <div class="flex flex-col">
+                <span>{{ formatRecoveryDays(row.recovery_10_days) }}</span>
+                <span v-if="row.recovery_10_days > 0" class="text-xs text-gray-400">
+                  {{ formatDate(row.fall_end_date) }} → {{ formatDate(row.recovery_10_date) }}
                 </span>
               </div>
             </td>

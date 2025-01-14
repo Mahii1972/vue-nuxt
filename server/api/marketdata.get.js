@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
     const query = `
       SELECT
         index_name,
-        "date",
+        "date" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata' as date,
         high,
         "close"
       FROM
@@ -20,11 +20,15 @@ export default defineEventHandler(async (event) => {
 
     // Group data by index and year
     const groupedData = {}
+    const indexData = {} // Store all data by index for cross-year analysis
+    
     data.forEach(row => {
-      const date = new Date(row.date)
+      // Convert UTC date to local timezone by explicitly constructing with date string
+      const date = new Date(row.date.toLocaleString())
       const year = date.getFullYear()
       const key = `${row.index_name}_${year}`
       
+      // Store in year-based groups
       if (!groupedData[key]) {
         groupedData[key] = {
           index_name: row.index_name,
@@ -35,72 +39,67 @@ export default defineEventHandler(async (event) => {
         }
       }
       
-      groupedData[key].prices.push(parseFloat(row.close))
+      groupedData[key].prices.push(parseFloat(row.high))
       groupedData[key].dates.push(date)
       groupedData[key].highs.push(parseFloat(row.high))
+
+      // Store in index-based groups for cross-year analysis
+      if (!indexData[row.index_name]) {
+        indexData[row.index_name] = {
+          prices: [],
+          dates: [],
+          highs: []
+        }
+      }
+      indexData[row.index_name].prices.push(parseFloat(row.high))
+      indexData[row.index_name].dates.push(date)
+      indexData[row.index_name].highs.push(parseFloat(row.high))
     })
 
     // Calculate stats for each group
     const analyzedData = Object.entries(groupedData).map(([key, group]) => {
+      const [indexName, yearStr] = key.split('_')
+      const year = parseInt(yearStr)
+      
       // Find yearly high and its date
       const yearlyHigh = Math.max(...group.highs)
       const highIndex = group.highs.indexOf(yearlyHigh)
       const highDate = group.dates[highIndex]
 
-      // Calculate threshold and breach periods
+      // Track all instances of 10% falls using cross-year data
       const threshold = yearlyHigh * 0.9
-      let daysBelow10 = 0
-      let breachStartDate = null
-      let breachEndDate = null
-      let consecutiveDays = 0
-      let tempStartDate = null
+      let fallInstances = []
+      let currentFall = null
 
-      // Function to check if a date is a trading day
-      const isConsecutiveDay = (date1, date2) => {
-        const diffTime = Math.abs(date2 - date1)
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-        return diffDays <= 3 // Allow for weekends and single holidays
-      }
+      // Find the starting index in the full index data that matches our high date
+      const fullIndexData = indexData[indexName]
+      // Use getTime() for comparison after ensuring both dates are in local timezone
+      const fullHighIndex = fullIndexData.dates.findIndex(d => 
+        d.toLocaleString().split(',')[0] === highDate.toLocaleString().split(',')[0]
+      )
 
-      // Process data for current year
-      for (let i = 0; i < group.prices.length; i++) {
-        const price = group.prices[i]
-        const date = group.dates[i]
-
-        if (price <= threshold) {
-          if (!tempStartDate) {
-            tempStartDate = date
-            consecutiveDays = 1
-          } else if (isConsecutiveDay(group.dates[i-1], date)) {
-            consecutiveDays++
-          } else {
-            // Reset if not consecutive
-            tempStartDate = date
-            consecutiveDays = 1
-          }
-
-          // If we have 5 consecutive days below threshold, consider it a breach
-          if (consecutiveDays >= 5 && !breachStartDate) {
-            breachStartDate = tempStartDate
+      // Look for all instances of 10% falls after ATH in current and future years
+      for (let i = fullHighIndex; i < fullIndexData.prices.length; i++) {
+        const currentDate = fullIndexData.dates[i]
+        if (fullIndexData.prices[i] <= threshold) {
+          if (!currentFall) {
+            // Start of a new fall
+            currentFall = {
+              startDate: new Date(highDate.toLocaleString()),
+              endDate: new Date(currentDate.toLocaleString()),
+              days: Math.round((currentDate - highDate) / (1000 * 60 * 60 * 24)),
+              breachValue: fullIndexData.prices[i]
+            }
+            fallInstances.push(currentFall)
           }
         } else {
-          if (breachStartDate && !breachEndDate) {
-            breachEndDate = date
-            // Calculate days in breach period
-            const breachDays = Math.round((breachEndDate - breachStartDate) / (1000 * 60 * 60 * 24))
-            daysBelow10 = breachDays
-          }
-          tempStartDate = null
-          consecutiveDays = 0
+          currentFall = null
         }
       }
 
-      // If breach started but didn't end, use last available date
-      if (breachStartDate && !breachEndDate) {
-        breachEndDate = group.dates[group.dates.length - 1]
-        daysBelow10 = Math.round((breachEndDate - breachStartDate) / (1000 * 60 * 60 * 24))
-      }
-
+      // Use the first instance for the main metrics
+      const firstFall = fallInstances[0] || { days: 0, startDate: null, endDate: null, breachValue: null }
+      
       // Calculate max drawdown and recovery
       let maxDrawdown = 0
       let maxDrawdownDate = null
@@ -112,27 +111,70 @@ export default defineEventHandler(async (event) => {
         const drawdown = ((yearlyHigh - group.prices[i]) / yearlyHigh) * 100
         if (drawdown > maxDrawdown) {
           maxDrawdown = drawdown
-          maxDrawdownDate = group.dates[i]
+          maxDrawdownDate = new Date(group.dates[i].toLocaleString())
         }
       }
 
       // If we found a drawdown, look for recovery
       if (maxDrawdownDate) {
-        const maxDrawdownIndex = group.dates.findIndex(d => d.getTime() === maxDrawdownDate.getTime())
+        const maxDrawdownIndex = group.dates.findIndex(d => 
+          d.toLocaleString().split(',')[0] === maxDrawdownDate.toLocaleString().split(',')[0]
+        )
         
-        // Look for recovery point
-        for (let i = maxDrawdownIndex; i < group.prices.length; i++) {
-          if (group.prices[i] >= yearlyHigh * 0.95) { // Consider 95% of high as recovery
-            recoveryDays = Math.round((group.dates[i] - maxDrawdownDate) / (1000 * 60 * 60 * 24))
-            recoveryDate = group.dates[i]
+        // Look for recovery point (100% of yearly high)
+        for (let i = maxDrawdownIndex; i < fullIndexData.prices.length; i++) {
+          const currentDate = fullIndexData.dates[i]
+          // Only look for recovery in current or future years
+          if (currentDate.getFullYear() >= year && fullIndexData.prices[i] >= yearlyHigh) {
+            recoveryDays = Math.round((currentDate - maxDrawdownDate) / (1000 * 60 * 60 * 24))
+            recoveryDate = currentDate
             break
           }
         }
 
-        // If no recovery found, use last available date
+        // If no recovery found, use last available date of the same or future years
         if (!recoveryDate) {
-          recoveryDate = group.dates[group.dates.length - 1]
-          recoveryDays = Math.round((recoveryDate - maxDrawdownDate) / (1000 * 60 * 60 * 24))
+          const lastValidDate = fullIndexData.dates.find(d => d.getFullYear() >= year)
+          if (lastValidDate) {
+            recoveryDate = lastValidDate
+            recoveryDays = Math.round((recoveryDate - maxDrawdownDate) / (1000 * 60 * 60 * 24))
+          } else {
+            recoveryDays = 0
+            recoveryDate = null
+          }
+        }
+      }
+
+      // Calculate recovery from 10% breach
+      let recovery10Days = 0
+      let recovery10Date = null
+      
+      if (firstFall.endDate) {
+        // Look for recovery point from 10% breach
+        const breachIndex = fullIndexData.dates.findIndex(d => 
+          d.toLocaleString().split(',')[0] === firstFall.endDate.toLocaleString().split(',')[0]
+        )
+        
+        for (let i = breachIndex; i < fullIndexData.prices.length; i++) {
+          const currentDate = fullIndexData.dates[i]
+          // Only look for recovery in current or future years
+          if (currentDate.getFullYear() >= year && fullIndexData.prices[i] >= yearlyHigh) {
+            recovery10Days = Math.round((currentDate - firstFall.endDate) / (1000 * 60 * 60 * 24))
+            recovery10Date = currentDate
+            break
+          }
+        }
+
+        // If no recovery found, use last available date of the same or future years
+        if (!recovery10Date && breachIndex !== -1) {
+          const lastValidDate = fullIndexData.dates.find(d => d.getFullYear() >= year)
+          if (lastValidDate) {
+            recovery10Date = lastValidDate
+            recovery10Days = Math.round((recovery10Date - firstFall.endDate) / (1000 * 60 * 60 * 24))
+          } else {
+            recovery10Days = 0
+            recovery10Date = null
+          }
         }
       }
 
@@ -140,13 +182,17 @@ export default defineEventHandler(async (event) => {
         index_name: group.index_name,
         year: group.year,
         yearly_high: yearlyHigh,
-        days_below_10: daysBelow10,
-        breach_date: breachStartDate,
-        breach_end_date: breachEndDate,
+        days_to_fall_10: firstFall.days,
+        fall_start_date: firstFall.startDate,
+        fall_end_date: firstFall.endDate,
+        breach_value: firstFall.breachValue,
+        fall_instances: fallInstances,
         max_drawdown: maxDrawdown.toFixed(2),
         recovery_days: recoveryDays || 0,
         drawdown_date: maxDrawdownDate,
-        recovery_date: recoveryDate
+        recovery_date: recoveryDate,
+        recovery_10_days: recovery10Days,
+        recovery_10_date: recovery10Date
       }
     })
 
