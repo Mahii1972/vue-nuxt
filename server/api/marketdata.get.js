@@ -124,8 +124,8 @@ export default defineEventHandler(async (event) => {
         // Look for recovery point (100% of yearly high)
         for (let i = maxDrawdownIndex; i < fullIndexData.prices.length; i++) {
           const currentDate = fullIndexData.dates[i]
-          // Only look for recovery in current or future years
-          if (currentDate.getFullYear() >= year && fullIndexData.prices[i] >= yearlyHigh) {
+          // Only look for recovery in current or future years AND after drawdown date
+          if (currentDate > maxDrawdownDate && currentDate.getFullYear() >= year && fullIndexData.prices[i] >= yearlyHigh) {
             recoveryDays = Math.round((currentDate - maxDrawdownDate) / (1000 * 60 * 60 * 24))
             recoveryDate = currentDate
             break
@@ -134,7 +134,7 @@ export default defineEventHandler(async (event) => {
 
         // If no recovery found, use last available date of the same or future years
         if (!recoveryDate) {
-          const lastValidDate = fullIndexData.dates.find(d => d.getFullYear() >= year)
+          const lastValidDate = fullIndexData.dates.find(d => d.getFullYear() >= year && d > maxDrawdownDate)
           if (lastValidDate) {
             recoveryDate = lastValidDate
             recoveryDays = Math.round((recoveryDate - maxDrawdownDate) / (1000 * 60 * 60 * 24))
@@ -157,8 +157,8 @@ export default defineEventHandler(async (event) => {
         
         for (let i = breachIndex; i < fullIndexData.prices.length; i++) {
           const currentDate = fullIndexData.dates[i]
-          // Only look for recovery in current or future years
-          if (currentDate.getFullYear() >= year && fullIndexData.prices[i] >= yearlyHigh) {
+          // Only look for recovery in current or future years AND after breach date
+          if (currentDate > firstFall.endDate && currentDate.getFullYear() >= year && fullIndexData.prices[i] >= yearlyHigh) {
             recovery10Days = Math.round((currentDate - firstFall.endDate) / (1000 * 60 * 60 * 24))
             recovery10Date = currentDate
             break
@@ -167,7 +167,7 @@ export default defineEventHandler(async (event) => {
 
         // If no recovery found, use last available date of the same or future years
         if (!recovery10Date && breachIndex !== -1) {
-          const lastValidDate = fullIndexData.dates.find(d => d.getFullYear() >= year)
+          const lastValidDate = fullIndexData.dates.find(d => d.getFullYear() >= year && d > firstFall.endDate)
           if (lastValidDate) {
             recovery10Date = lastValidDate
             recovery10Days = Math.round((recovery10Date - firstFall.endDate) / (1000 * 60 * 60 * 24))
