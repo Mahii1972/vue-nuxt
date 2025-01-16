@@ -16,5 +16,8 @@ export default defineNuxtConfig({
     public: {
       apiBase: '/api'
     }
+  },
+  build: {
+    transpile: ['v-calendar']
   }
 })

@@ -3,16 +3,32 @@
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold">Market Overview</h1>
       <div class="flex items-center gap-4">
-        <select 
-          v-model="selectedDate" 
-          class="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          @change="fetchAllData"
-        >
-          <option value="">Select Date</option>
-          <option v-for="date in availableDates" :key="date.date_captured" :value="date.date_captured">
-            {{ formatDate(date.date_captured) }}
-          </option>
-        </select>
+        <div class="relative">
+          <div 
+            class="flex items-center gap-2 bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 hover:bg-gray-700 focus:outline-none cursor-pointer"
+            @click="toggleDatePicker"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {{ selectedDate ? formatDate(selectedDate) : 'Select Date' }}
+          </div>
+          <div v-show="showDatePicker" class="absolute top-12 left-0 z-50">
+            <DatePicker
+              v-model="selectedDate"
+              :masks="{ input: 'MMM D, YYYY' }"
+              :min-date="minDate"
+              :max-date="maxDate"
+              :available-dates="availableDatesArray"
+              class="date-picker"
+              @update:model-value="onDateSelect"
+              :model-config="{
+                type: 'string',
+                mask: 'YYYY-MM-DD',
+              }"
+            />
+          </div>
+        </div>
       </div>
     </div>
     
@@ -45,11 +61,15 @@
 </template>
 
 <script setup>
+import { DatePicker } from 'v-calendar'
+import 'v-calendar/style.css'
+
 const sectoralData = ref({})
 const bseData = ref([])
 const marketData = ref([])
 const availableDates = ref([])
 const selectedDate = ref('')
+const showDatePicker = ref(false)
 
 // Format date for display
 const formatDate = (dateStr) => {
@@ -170,11 +190,112 @@ const fetchAllData = () => {
 // Initial data fetch
 onMounted(() => {
   fetchDates()
+  document.addEventListener('click', (e) => {
+    const picker = document.querySelector('.date-picker')
+    const button = document.querySelector('.cursor-pointer')
+    if (picker && !picker.contains(e.target) && !button.contains(e.target)) {
+      showDatePicker.value = false
+    }
+  })
 })
+
+onUnmounted(() => {
+  document.removeEventListener('click', () => {})
+})
+
+// Computed property for date picker attributes
+const datePickerAttributes = computed(() => {
+  return availableDates.value.map(date => ({
+    dates: new Date(date.date_captured),
+    highlight: true
+  }))
+})
+
+// Computed properties for date picker
+const minDate = computed(() => {
+  if (availableDates.value.length === 0) return null
+  return new Date(Math.min(...availableDates.value.map(d => new Date(d.date_captured))))
+})
+
+const maxDate = computed(() => {
+  if (availableDates.value.length === 0) return null
+  return new Date(Math.max(...availableDates.value.map(d => new Date(d.date_captured))))
+})
+
+// Computed property for available dates array
+const availableDatesArray = computed(() => {
+  return availableDates.value.map(d => new Date(d.date_captured))
+})
+
+// Toggle date picker visibility
+const toggleDatePicker = () => {
+  showDatePicker.value = !showDatePicker.value
+}
+
+// Handle date selection
+const onDateSelect = (date) => {
+  selectedDate.value = date
+  showDatePicker.value = false
+  fetchAllData()
+}
 </script>
 
 <style scoped>
 .container {
   max-width: 1400px;
+}
+
+:deep(.date-picker) {
+  --vc-bg-light: #1f2937;
+  --vc-bg-dark: #111827;
+  --vc-border: #374151;
+  --vc-text-light: #ffffff;
+  --vc-text-dark: #9ca3af;
+  --vc-accent: #3b82f6;
+  --vc-accent-dark: #2563eb;
+  --vc-highlight: #3b82f6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-radius: 0.5rem;
+  border: 1px solid var(--vc-border);
+  background-color: var(--vc-bg-light);
+}
+
+:deep(.date-picker .vc-disabled) {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+:deep(.date-picker .vc-pane) {
+  background-color: var(--vc-bg-light);
+  border-color: var(--vc-border);
+}
+
+:deep(.date-picker .vc-header) {
+  color: var(--vc-text-light);
+}
+
+:deep(.date-picker .vc-weekday) {
+  color: var(--vc-text-dark);
+}
+
+:deep(.date-picker .vc-day) {
+  color: var(--vc-text-light);
+}
+
+:deep(.date-picker .vc-day-content) {
+  color: var(--vc-text-light);
+}
+
+:deep(.date-picker .vc-highlights) {
+  background-color: var(--vc-highlight);
+  opacity: 0.2;
+}
+
+:deep(.date-picker input) {
+  background-color: var(--vc-bg-light);
+  color: var(--vc-text-light);
+  border-color: var(--vc-border);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
 }
 </style> 
