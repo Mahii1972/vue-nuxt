@@ -1,5 +1,8 @@
 <template>
   <div class="container mx-auto p-4 space-y-8 text-white">
+    <!-- MoneyControl News Feed -->
+    <MoneyControlFeed />
+
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold">Market Overview</h1>
       <div class="flex items-center gap-4">
@@ -63,6 +66,7 @@
 <script setup>
 import { DatePicker } from 'v-calendar'
 import 'v-calendar/style.css'
+import MoneyControlFeed from '~/components/MoneyControlFeed.vue'
 
 const sectoralData = ref({})
 const bseData = ref([])
